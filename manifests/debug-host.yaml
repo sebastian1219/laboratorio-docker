@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: debug-host
+  namespace: wordpress-app
+spec:
+  nodeName: docker-desktop
+  restartPolicy: Never
+  containers:
+    - name: busybox
+      image: busybox
+      command: ["sh", "-c", "mkdir -p /host/data/mariadb && chmod 777 /host/data/mariadb && echo '✅ Directorio creado y permisos aplicados' && sleep 5"]
+      securityContext:
+        privileged: true
+      volumeMounts:
+        - name: host-root
+          mountPath: /host
+  volumes:
+    - name: host-root
+      hostPath:
+        path: /
+        type: Directory

@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: debug
+  namespace: wordpress-app
+spec:
+  restartPolicy: Never
+  volumes:
+    - name: mariadb-data
+      persistentVolumeClaim:
+        claimName: mariadb-pvc
+  containers:
+    - name: debug
+      image: busybox:1.36
+      command: ["sh"]
+      stdin: true
+      tty: true
+      volumeMounts:
+        - name: mariadb-data
+          mountPath: /mnt

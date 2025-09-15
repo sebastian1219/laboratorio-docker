@@ -1,0 +1,146 @@
+# =============================
+# WORDPRESS PVC
+# =============================
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: wordpress-pvc
+  namespace: wordpress-app
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+  storageClassName: manual
+
+---
+# =============================
+# WORDPRESS DEPLOYMENT
+# =============================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wordpress
+  namespace: wordpress-app
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: wordpress
+  template:
+    metadata:
+      labels:
+        app: wordpress
+    spec:
+      initContainers:
+        - name: copy-wordpress
+          image: wordpress:6.5
+          command:
+            - sh
+            - -c
+            - |
+              if [ -z "$(ls -A /var/www/html)" ]; then
+                echo "📥 Copiando WordPress al volumen..."
+                cp -r /usr/src/wordpress/* /var/www/html/
+                chown -R www-data:www-data /var/www/html
+              else
+                echo "✅ /var/www/html ya contiene archivos, no se copian de nuevo"
+              fi
+          volumeMounts:
+            - name: wordpress-data
+              mountPath: /var/www/html
+
+      containers:
+        - name: wordpress
+          image: wordpress:6.5
+          env:
+            - name: WORDPRESS_DB_HOST
+              value: mariadb
+            - name: WORDPRESS_DB_USER
+              value: wpuser
+            - name: WORDPRESS_DB_PASSWORD
+              value: wppassword
+            - name: WORDPRESS_DB_NAME
+              value: wordpress
+          ports:
+            - containerPort: 8080
+          command: ["/bin/sh"]
+          args:
+            - -c
+            - |
+              # Ajustar Apache para escuchar en 8080 y luego lanzarlo
+              sed -i 's/80/8080/g' /etc/apache2/ports.conf /etc/apache2/sites-enabled/000-default.conf
+              apache2-foreground
+          volumeMounts:
+            - name: wordpress-data
+              mountPath: /var/www/html
+
+      volumes:
+        - name: wordpress-data
+          persistentVolumeClaim:
+            claimName: wordpress-pvc
+
+---
+# =============================
+# WORDPRESS SERVICE (NodePort)
+# =============================
+apiVersion: v1
+kind: Service
+metadata:
+  name: wordpress-service
+  namespace: wordpress-app
+spec:
+  type: NodePort
+  selector:
+    app: wordpress
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+      nodePort: 30088
+
+# =============================
+# PHPMYADMIN DEPLOYMENT + SERVICE
+# =============================
+---
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: phpmyadmin
+  namespace: wordpress-app
+spec:
+  selector:
+    matchLabels:
+      app: phpmyadmin
+  template:
+    metadata:
+      labels:
+        app: phpmyadmin
+    spec:
+      containers:
+        - name: phpmyadmin
+          image: phpmyadmin:5
+          env:
+            - name: PMA_HOST
+              value: mariadb
+            - name: PMA_PORT
+              value: "3306"
+          ports:
+            - containerPort: 80
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: phpmyadmin-service
+  namespace: wordpress-app
+spec:
+  type: NodePort
+  selector:
+    app: phpmyadmin
+  ports:
+    - port: 80
+      targetPort: 80
+      nodePort: 30080
